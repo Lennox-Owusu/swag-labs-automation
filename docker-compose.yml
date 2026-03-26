@@ -1,0 +1,28 @@
+services:
+
+  # ── Test runner ───────────────────────────────────────────────
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    container_name: swag-labs-tests
+    environment:
+      - browser=chrome
+      - headless=true
+    volumes:
+      - ./target/allure-results:/app/target/allure-results
+      - ./target/logs:/app/target/logs
+    command: ["echo", "Tests completed"]
+
+  # ── Allure report server ──────────────────────────────────────
+  allure-report:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: report
+    container_name: swag-labs-allure-report
+    ports:
+      - "8080:80"
+    depends_on:
+      - tests

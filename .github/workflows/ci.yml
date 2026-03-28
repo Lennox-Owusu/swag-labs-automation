@@ -87,11 +87,14 @@ jobs:
             FAILED=$((FAILED + ${FA:-0} + ${E:-0}))
             SKIPPED=$((SKIPPED + ${SK:-0}))
 
-            # Extract failed test names
-            NAMES=$(grep -oP '(?<=classname=")[^"]+(?="[^>]*>.*?<failure)' "$f" 2>/dev/null || true)
-            if [ -n "$NAMES" ]; then
-              FAILED_TESTS="$FAILED_TESTS $NAMES"
-            fi
+            # Extract failed test names from <testcase> elements that contain <failure>
+            while IFS= read -r line; do
+              TESTNAME=$(echo "$line" | grep -oP 'name="\K[^"]+')
+              CLASSNAME=$(echo "$line" | grep -oP 'classname="\K[^"]+')
+              if [ -n "$TESTNAME" ] && [ -n "$CLASSNAME" ]; then
+                FAILED_TESTS="$FAILED_TESTS\n• $CLASSNAME.$TESTNAME"
+              fi
+            done < <(grep -B1 "<failure" "$f" | grep "<testcase")
           done
 
           PASSED=$((TOTAL - FAILED - SKIPPED))
@@ -108,16 +111,17 @@ jobs:
             STATUS="PASSED"
           fi
 
-          # Clean up failed test names
-          FAILED_TESTS=$(echo "$FAILED_TESTS" | tr ' ' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
-
           echo "total=$TOTAL"         >> $GITHUB_OUTPUT
           echo "passed=$PASSED"       >> $GITHUB_OUTPUT
           echo "failed=$FAILED"       >> $GITHUB_OUTPUT
           echo "skipped=$SKIPPED"     >> $GITHUB_OUTPUT
           echo "pass_rate=$PASS_RATE" >> $GITHUB_OUTPUT
           echo "status=$STATUS"       >> $GITHUB_OUTPUT
-          echo "failed_tests=$FAILED_TESTS" >> $GITHUB_OUTPUT
+
+          # Multiline output for failed tests
+          echo "failed_tests<<EOF"    >> $GITHUB_OUTPUT
+          echo -e "$FAILED_TESTS"     >> $GITHUB_OUTPUT
+          echo "EOF"                  >> $GITHUB_OUTPUT
 
       # ── Generate Allure report ───────────────────────────────────
       - name: Generate Allure report
@@ -200,6 +204,13 @@ jobs:
                   }
                 },
                 {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ steps.results.outputs.failed > 0 && format(':x: *Failed Tests:*\n```{0}```', steps.results.outputs.failed_tests) || '✅ All tests passed' }}"
+                  }
+                },
+                {
                   "type": "context",
                   "elements": [
                     {
@@ -207,13 +218,6 @@ jobs:
                       "text": "Repository: ${{ github.repository }} | Run #${{ github.run_number }} | Triggered by: ${{ github.actor }}"
                     }
                   ]
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "${{ steps.results.outputs.failed > 0 && format(':x: *Failed Tests:*\n{0}', steps.results.outputs.failed_tests) || '✅ All tests passed' }}"
-                  }
                 }
               ]
             }
@@ -289,10 +293,10 @@ jobs:
                 <a href="${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}">View Commit</a>
               </p>
 
+              ${{ steps.results.outputs.failed > 0 && format('<h3 style="color: #F05251;">❌ Failed Tests</h3><pre style="background:#fff0f0;padding:10px;border-radius:4px;">{0}</pre>', steps.results.outputs.failed_tests) || '<p style="color: #0D9F6E;">✅ All tests passed</p>' }}
+
               <p style="color: #666; font-size: 12px;">
                 Repository: ${{ github.repository }} | Run #${{ github.run_number }} | Triggered by: ${{ github.actor }}
               </p>
-
-              ${{ steps.results.outputs.failed > 0 && format('<h3 style="color: #F05251;">❌ Failed Tests</h3><p>{0}</p>', steps.results.outputs.failed_tests) || '<p style="color: #0D9F6E;">✅ All tests passed</p>' }}
             </body>
             </html>

@@ -146,7 +146,22 @@ jobs:
           path: target/site/allure-maven-plugin/
           retention-days: 7
 
-      # ── Slack notification ───────────────────────────────────────
+          # ── Build Slack message ──────────────────────────────────────
+      - name: Build Slack message
+        id: slack-message
+        if: always()
+        run: |
+          if [ "${{ steps.results.outputs.failed }}" -gt 0 ]; then
+            STATUS_TEXT="❌ FAILED"
+            TESTS_TEXT=":x: *Failed Tests:*\n${{ steps.results.outputs.failed_tests }}"
+          else
+            STATUS_TEXT="✅ PASSED"
+            TESTS_TEXT="✅ All tests passed"
+          fi
+          echo "status_text=$STATUS_TEXT" >> $GITHUB_OUTPUT
+          echo "tests_text=$TESTS_TEXT"   >> $GITHUB_OUTPUT
+
+     # ── Slack notification ───────────────────────────────────────
       - name: Send Slack notification
         if: always()
         uses: slackapi/slack-github-action@v1.27.0
@@ -166,7 +181,7 @@ jobs:
                   "fields": [
                     {
                       "type": "mrkdwn",
-                      "text": "*Status:*\n${{ steps.results.outputs.status == 'PASSED' && '✅ PASSED' || '❌ FAILED' }}"
+                      "text": "*Status:*\n${{ steps.slack-message.outputs.status_text }}"
                     },
                     {
                       "type": "mrkdwn",
@@ -186,7 +201,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": ":bar_chart: *Test Results Summary*\nTotal: ${{ steps.results.outputs.total }} | Passed: ✅ ${{ steps.results.outputs.passed }} | Failed: ❌ ${{ steps.results.outputs.failed }} | Skipped: ⏭ ${{ steps.results.outputs.skipped }}"
+                    "text": ":bar_chart: *Test Results Summary*\nTotal: ${{ steps.results.outputs.total }} | Passed: ${{ steps.results.outputs.passed }} | Failed: ${{ steps.results.outputs.failed }} | Skipped: ${{ steps.results.outputs.skipped }}"
                   }
                 },
                 {
@@ -207,7 +222,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "${{ steps.results.outputs.failed > 0 && format(':x: *Failed Tests:*\n```{0}```', steps.results.outputs.failed_tests) || '✅ All tests passed' }}"
+                    "text": "${{ steps.slack-message.outputs.tests_text }}"
                   }
                 },
                 {
@@ -224,7 +239,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-
+          
       # ── Email notification ───────────────────────────────────────
       - name: Send email notification
         if: always()

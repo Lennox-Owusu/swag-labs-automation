@@ -146,20 +146,28 @@ jobs:
           path: target/site/allure-maven-plugin/
           retention-days: 7
 
-          # ── Build Slack message ──────────────────────────────────────
+      # ── Build Slack message ──────────────────────────────────────
       - name: Build Slack message
         id: slack-message
         if: always()
         run: |
           if [ "${{ steps.results.outputs.failed }}" -gt 0 ]; then
             STATUS_TEXT="❌ FAILED"
-            TESTS_TEXT=":x: *Failed Tests:*\n${{ steps.results.outputs.failed_tests }}"
+            # Clean failed tests — replace newlines and bullets with safe text
+            CLEAN_TESTS=$(echo "${{ steps.results.outputs.failed_tests }}" \
+              | tr '\n' ' ' \
+              | sed 's/• /| /g' \
+              | sed 's/^[[:space:]]*//' \
+              | sed 's/[[:space:]]*$//')
+            TESTS_TEXT=":x: Failed Tests: $CLEAN_TESTS"
           else
             STATUS_TEXT="✅ PASSED"
             TESTS_TEXT="✅ All tests passed"
           fi
-          echo "status_text=$STATUS_TEXT" >> $GITHUB_OUTPUT
-          echo "tests_text=$TESTS_TEXT"   >> $GITHUB_OUTPUT
+
+          # Write outputs safely — no special characters on the line
+          echo "status_text=${STATUS_TEXT}" >> $GITHUB_OUTPUT
+          echo "tests_text=${TESTS_TEXT}"   >> $GITHUB_OUTPUT
 
      # ── Slack notification ───────────────────────────────────────
       - name: Send Slack notification
